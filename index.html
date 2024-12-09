@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choropleth Map</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    svg {
+      margin: auto;
+      display: block;
+    }
+
+    .county {
+      stroke: #fff;
+      stroke-width: 0.5;
+    }
+
+    #tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid black;
+      padding: 5px;
+      display: none;
+      font-size: 12px;
+    }
+
+    #legend {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+
+    .legend-rect {
+      margin-right: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title">United States Educational Attainment</h1>
+  <p id="description">Percentage of adults age 25 and older with a bachelor's degree or higher (2010-2014)</p>
+  <div id="tooltip"></div>
+  <svg id="choropleth"></svg>
+  <div id="legend"></div>
+  <script>
+    const educationURL = "https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/for_user_education.json";
+    const countyURL = "https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/counties.json";
+
+    Promise.all([fetch(educationURL).then(res => res.json()), fetch(countyURL).then(res => res.json())])
+      .then(([educationData, countyData]) => createChoropleth(educationData, countyData));
+
+    function createChoropleth(educationData, countyData) {
+      const width = 1000;
+      const height = 600;
+      const padding = 80;
+
+      const colors = [
+        "#f7fbff", "#deebf7", "#c6dbef", "#9ecae1",
+        "#6baed6", "#4292c6", "#2171b5", "#084594"
+      ];
+
+      const svg = d3
+        .select("#choropleth")
+        .attr("width", width)
+        .attr("height", height);
+
+      const tooltip = d3.select("#tooltip");
+
+      // Color scale
+      const colorScale = d3
+        .scaleThreshold()
+        .domain(d3.range(10, 70, 10))
+        .range(colors);
+
+      // Legend
+      const legendWidth = 300;
+      const legendHeight = 20;
+
+      const legendScale = d3
+        .scaleLinear()
+        .domain([0, 70])
+        .range([0, legendWidth]);
+
+      const legendAxis = d3.axisBottom(legendScale).tickValues(d3.range(10, 70, 10)).tickFormat(d => `${d}%`);
+
+      const legend = d3
+        .select("#legend")
+        .append("svg")
+        .attr("width", legendWidth + 50)
+        .attr("height", legendHeight + 50);
+
+      legend
+        .selectAll(".legend-rect")
+        .data(colors)
+        .enter()
+        .append("rect")
+        .attr("class", "legend-rect")
+        .attr("x", (_, i) => (i * legendWidth) / colors.length)
+        .attr("y", 0)
+        .attr("width", legendWidth / colors.length)
+        .attr("height", legendHeight)
+        .attr("fill", d => d);
+
+      legend
+        .append("g")
+        .attr("transform", `translate(0, ${legendHeight})`)
+        .call(legendAxis);
+
+      // Convert TopoJSON to GeoJSON
+      const counties = topojson.feature(countyData, countyData.objects.counties).features;
+
+      // Map counties
+      svg
+        .append("g")
+        .selectAll("path")
+        .data(counties)
+        .enter()
+        .append("path")
+        .attr("d", d3.geoPath())
+        .attr("class", "county")
+        .attr("data-fips", d => d.id)
+        .attr("data-education", d => {
+          const county = educationData.find(ed => ed.fips === d.id);
+          return county ? county.bachelorsOrHigher : 0;
+        })
+        .attr("fill", d => {
+          const county = educationData.find(ed => ed.fips === d.id);
+          return county ? colorScale(county.bachelorsOrHigher) : "#ccc";
+        })
+        .on("mouseover", (event, d) => {
+          const county = educationData.find(ed => ed.fips === d.id);
+          if (county) {
+            tooltip
+              .style("left", `${event.pageX + 10}px`)
+              .style("top", `${event.pageY - 30}px`)
+              .style("display", "block")
+              .attr("data-education", county.bachelorsOrHigher)
+              .html(
+                `${county.area_name}, ${county.state}<br>
+                ${county.bachelorsOrHigher}%`
+              );
+          }
+        })
+        .on("mouseout", () => tooltip.style("display", "none"));
+    }
+  </script>
+  <script src="https://d3js.org/topojson.v3.min.js"></script>
+</body>
+</html>
